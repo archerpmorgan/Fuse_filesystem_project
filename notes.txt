@@ -1,0 +1,10 @@
+implementation notes
+
+Space management:
+	store disk bitmap in last (ish) two blocks of file. 1 means block in use, 0 means available
+	blick size is 512. disk size is 1K*5K = (1024)*(5120) = 5242880
+			(2^9) 					(2^10)* (5*2^10)
+
+		So there should be 5*2^11 blocks in on the disk. we need 20 blocks to store this bitmap
+
+		Assume that a few at the end are used for metadata, so store bitmap as blocknums (5*2^11 - 20) upto (5*2^11 - 18) and don't use last two blocks
