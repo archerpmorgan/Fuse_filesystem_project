@@ -95,21 +95,49 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
 	} else  {
-		
-		//If the path does exist and is a directory:
-		//stbuf->st_mode = S_IFDIR | 0755;
-		//stbuf->st_nlink = 2;
+		// read in root from disl
+		FILE * fp;
+	   	fp = fopen (".disk", "ab+");
+	   	struct csc452_root_directory root;
+		fseek(fp, 0, SEEK_SET);
+		fread(&root, sizeof(csc452_root_directory), 1, fp);   	
 
-		//If the path does exist and is a file:
-		//stbuf->st_mode = S_IFREG | 0666;
-		//stbuf->st_nlink = 2;
-		//stbuf->st_size = file size
-		
+		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+
+		// search filesystem for object specified by path
+		struct csc452_directory_entry dir;
+		int i,j;
+		for (i = 0; i <root.nDirectories; i++){
+			if (strcmp(directories[i].dname, directory) == 0 ){
+				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
+					//its a directory
+					stbuf->st_mode = S_IFDIR | 0755;
+					stbuf->st_nlink = 2;
+					fclose(fp);
+					return res;
+				}
+				else {
+					fseek(fp, directories[i].nStartBlock, SEEK_SET);	
+					fread(&dir, sizeof(csc452_directory_entry), 1, fp); 
+					for (j = 0; j < dir.nFiles; j++) {
+						if (strcmp(dir.files[j].fname, fname) == 0) {
+							if (strcmp(dir.files[j].fext, extension) == 0) {
+								stbuf->st_mode = S_IFREG | 0666;
+								stbuf->st_nlink = 2;
+								stbuf->st_size = dir.files[j].fsize;
+								fclose(fp);
+								return res;
+							}
+						}
+					}
+				}
+			}
+		}
+	  	fclose(fp);
 		//Else return that path doesn't exist
 		res = -ENOENT;
-
 	}
-
 	return res;
 }
 
@@ -150,6 +178,10 @@ static int csc452_mkdir(const char *path, mode_t mode)
 {
 	(void) path;
 	(void) mode;
+	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+
+
 
 	return 0;
 }
