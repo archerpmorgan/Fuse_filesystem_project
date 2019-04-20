@@ -80,6 +80,21 @@ struct csc452_disk_block
 
 typedef struct csc452_disk_block csc452_disk_block;
 
+/*
+ * returns the first index of directories in root that is free 
+ * returns -1 on error (all directories in root are in use)
+ *
+*/
+int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
+	int i;
+	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
+		if(root.directory[i] == NULL) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 
 /*
  * Called whenever the system wants to know the file attributes, including
@@ -176,12 +191,71 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  */
 static int csc452_mkdir(const char *path, mode_t mode)
 {
+	int i;
 	(void) path;
 	(void) mode;
 	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+	struct stat stbuf;
+	if (csc452_getattr(path, &stbuf) == 0) {
+		return EEXIST;
+	}
+	if (strlen(directory) > 8) {
+		return ENAMETOOLONG;
+	}
+
+	//if not only under root
+	if (strchr(filename, '/')){
+		return EPERM;
+	}
+
+	//make a new directory
+	struct csc452_directory newDirectory;
+	newDirectory.dname = directory;
 
 
+	FILE * fp;
+	fp = fopen (".disk", "ab+");
+	
+	struct csc452_root_directory root;
+	fseek(fp, 0, SEEK_SET);
+	fread(&root, sizeof(csc452_root_directory), 1, fp);  
+
+	if(root.nDirectories +1 > MAX_DIRS_IN_ROOT) {
+		return ENOSPC;
+	}
+
+	//10218 = 5*2^11 - 22 
+	//this is the block number the bit map starts on
+	fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
+	char bitmap[BLOCK_SIZE*20];
+
+	int found = 0;
+
+	fread(&root, bitmap, 1, fp); 
+	for(i = 1; i < 10218; i++) {
+		if(bitmap[i] == '\0') {
+			//theres space for a dir at i
+			root.nDirectories++;
+			newDirectory.nStartBlock = i;
+			bitmap[i] = 'SOH';
+			root.directories[getFirstFreeDirectoryIndex(root)] = newDirectory;
+			fp.close();
+			found = 1;
+			break;
+		}
+	}
+
+	if(found == 0) {
+		return EDQUOT;
+	}	
+
+	fp = fopen (".disk", "ab+");
+	fseek(fp, 0, SEEK_SET);
+	fwrite(&root, sizeof(csc452_root_directory), 1, fp);
+
+	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
+	fwrite(&newDirectory, sizeof(csc452_directory), 1, fp);
 
 	return 0;
 }
