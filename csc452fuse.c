@@ -97,6 +97,27 @@ int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
 
 
 /*
+ * returns 1 if directory in root directory, 0 otherwise
+ * returns -1 on error (all directories in root are in use)
+ *
+*/
+int directory_exists(char* dirname, FILE* fp){
+
+	struct csc452_root_directory root;
+	fseek(fp, 0, SEEK_SET);
+	fread(&root, sizeof(csc452_root_directory), 1, fp); 
+	int i;
+	for (i = 0; i <root.nDirectories; i++){
+		if (strcmp(root.directories[i].dname, dirname) == 0 ){
+			return 1;
+		}
+	}
+	return 0;
+
+}
+
+
+/*
  * Called whenever the system wants to know the file attributes, including
  * simply whether the file exists or not.
  *
@@ -122,7 +143,6 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		strcpy(directory,"");
 		strcpy(filename,"");
 		strcpy(extension,"");
-		printf("got here 2");
 
 		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 		
@@ -130,11 +150,9 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		struct csc452_directory_entry dir;
 		int i,j;
 		for (i = 0; i <root.nDirectories; i++){
-			//printf("got here 4\n");
 			if (strcmp(root.directories[i].dname, directory) == 0 ){
 				
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
-					printf("got here 5\n");
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
 					stbuf->st_nlink = 2;
@@ -160,8 +178,10 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		}
 	  	fclose(fp);
 		//Else return that path doesn't exist
+		printf("%s", "get here, result is: ");
 		res = -ENOENT;
 	}
+	printf("%d\n", res);
 	return res;
 }
 
@@ -208,11 +228,15 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	strcpy(filename,"");
 	strcpy(extension,"");
 		
-
+	FILE * fp;
+	fp = fopen (".disk", "ab+");
+	if (! fp) {
+		printf("%s\n", "Could not open disk");
+		return ENOSPC;
+	}
 
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-	struct stat stbuf;
-	if (csc452_getattr(path, &stbuf) == 0) {
+	if (directory_exists(directory, fp) == 1) {
 		return EEXIST;
 	}
 	if (strlen(directory) > 8) {
@@ -227,10 +251,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	//make a new directory
 	struct csc452_directory newDirectory;
 	strcpy(newDirectory.dname,directory);
-
-
-	FILE * fp;
-	fp = fopen (".disk", "ab+");
 	
 	struct csc452_root_directory root;
 	// = (struct csc452_root_directory);
