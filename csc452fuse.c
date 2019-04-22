@@ -218,7 +218,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fp = fopen (".disk", "ab+");
 	
 	struct csc452_root_directory root;
-	// = (struct csc452_root_directory);
 	fseek(fp, 0, SEEK_SET);
 	fread(&root, sizeof(csc452_root_directory), 1, fp);  
 
