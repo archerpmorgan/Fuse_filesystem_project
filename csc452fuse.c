@@ -88,7 +88,7 @@ typedef struct csc452_disk_block csc452_disk_block;
 int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
 	int i;
 	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
-		if(root.directory[i] == NULL) {
+		if(strcmp(root.directories[i].dname, "")) { // intended function returns i if this directory is not taken
 			return i;
 		}
 	}
@@ -124,7 +124,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		struct csc452_directory_entry dir;
 		int i,j;
 		for (i = 0; i <root.nDirectories; i++){
-			if (strcmp(directories[i].dname, directory) == 0 ){
+			if (strcmp(root.directories[i].dname, directory) == 0 ){
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
@@ -133,10 +133,10 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 					return res;
 				}
 				else {
-					fseek(fp, directories[i].nStartBlock, SEEK_SET);	
+					fseek(fp, root.directories[i].nStartBlock, SEEK_SET);	
 					fread(&dir, sizeof(csc452_directory_entry), 1, fp); 
 					for (j = 0; j < dir.nFiles; j++) {
-						if (strcmp(dir.files[j].fname, fname) == 0) {
+						if (strcmp(dir.files[j].fname, filename) == 0) {
 							if (strcmp(dir.files[j].fext, extension) == 0) {
 								stbuf->st_mode = S_IFREG | 0666;
 								stbuf->st_nlink = 2;
@@ -211,7 +211,7 @@ static int csc452_mkdir(const char *path, mode_t mode)
 
 	//make a new directory
 	struct csc452_directory newDirectory;
-	newDirectory.dname = directory;
+	strcpy(newDirectory.dname,directory);
 
 
 	FILE * fp;
@@ -232,15 +232,15 @@ static int csc452_mkdir(const char *path, mode_t mode)
 
 	int found = 0;
 
-	fread(&root, bitmap, 1, fp); 
+	fread(bitmap, sizeof(bitmap), 1, fp); 
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
 			//theres space for a dir at i
 			root.nDirectories++;
 			newDirectory.nStartBlock = i;
-			bitmap[i] = 'SOH';
+			bitmap[i] = (char) 1;
 			root.directories[getFirstFreeDirectoryIndex(root)] = newDirectory;
-			fp.close();
+			fclose(fp);
 			found = 1;
 			break;
 		}
