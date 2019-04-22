@@ -105,27 +105,36 @@ int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
 static int csc452_getattr(const char *path, struct stat *stbuf)
 {
 	int res = 0;
-
+	
 	if (strcmp(path, "/") == 0) {
 		stbuf->st_mode = S_IFDIR | 0755;
 		stbuf->st_nlink = 2;
 	} else  {
+		
 		// read in root from disl
 		FILE * fp;
 	   	fp = fopen (".disk", "ab+");
 	   	struct csc452_root_directory root;
 		fseek(fp, 0, SEEK_SET);
 		fread(&root, sizeof(csc452_root_directory), 1, fp);   	
-
+		
 		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
-		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+		strcpy(directory,"");
+		strcpy(filename,"");
+		strcpy(extension,"");
+		printf("got here 2");
 
+		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+		
 		// search filesystem for object specified by path
 		struct csc452_directory_entry dir;
 		int i,j;
 		for (i = 0; i <root.nDirectories; i++){
+			//printf("got here 4\n");
 			if (strcmp(root.directories[i].dname, directory) == 0 ){
+				
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
+					printf("got here 5\n");
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
 					stbuf->st_nlink = 2;
@@ -195,6 +204,12 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	(void) path;
 	(void) mode;
 	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+	strcpy(directory,"");
+	strcpy(filename,"");
+	strcpy(extension,"");
+		
+
+
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	struct stat stbuf;
 	if (csc452_getattr(path, &stbuf) == 0) {
@@ -218,6 +233,7 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fp = fopen (".disk", "ab+");
 	
 	struct csc452_root_directory root;
+	// = (struct csc452_root_directory);
 	fseek(fp, 0, SEEK_SET);
 	fread(&root, sizeof(csc452_root_directory), 1, fp);  
 
