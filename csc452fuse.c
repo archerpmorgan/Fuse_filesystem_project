@@ -105,7 +105,7 @@ int directory_exists(char* dirname, FILE* fp){
 
 	struct csc452_root_directory root;
 	fseek(fp, 0, SEEK_SET);
-	fread(&root, sizeof(csc452_root_directory), 1, fp); 
+	fread(&root, sizeof(struct csc452_root_directory), 1, fp); 
 	int i;
 	for (i = 0; i <root.nDirectories; i++){
 		if (strcmp(root.directories[i].dname, dirname) == 0 ){
@@ -125,6 +125,7 @@ int directory_exists(char* dirname, FILE* fp){
  */
 static int csc452_getattr(const char *path, struct stat *stbuf)
 {
+	printf("calling getatt\n");
 	int res = 0;
 	
 	if (strcmp(path, "/") == 0) {
@@ -137,7 +138,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 	   	fp = fopen (".disk", "ab+");
 	   	struct csc452_root_directory root;
 		fseek(fp, 0, SEEK_SET);
-		fread(&root, sizeof(csc452_root_directory), 1, fp);   	
+		fread(&root, sizeof(struct csc452_root_directory), 1, fp);   	
 		
 		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
 		strcpy(directory,"");
@@ -161,7 +162,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 				}
 				else {
 					fseek(fp, root.directories[i].nStartBlock, SEEK_SET);	
-					fread(&dir, sizeof(csc452_directory_entry), 1, fp); 
+					fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
 					for (j = 0; j < dir.nFiles; j++) {
 						if (strcmp(dir.files[j].fname, filename) == 0) {
 							if (strcmp(dir.files[j].fext, extension) == 0) {
@@ -220,6 +221,9 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  */
 static int csc452_mkdir(const char *path, mode_t mode)
 {
+
+	printf("calling mkdir\n");
+
 	int i;
 	(void) path;
 	(void) mode;
@@ -227,25 +231,29 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	strcpy(directory,"");
 	strcpy(filename,"");
 	strcpy(extension,"");
+
+
 		
 	FILE * fp;
 	fp = fopen (".disk", "ab+");
 	if (! fp) {
 		printf("%s\n", "Could not open disk");
-		return ENOSPC;
+		return -ENOSPC;
 	}
-
+	
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	if (directory_exists(directory, fp) == 1) {
-		return EEXIST;
+		printf("directory already exists\n");
+		return -EEXIST;
 	}
+	
 	if (strlen(directory) > 8) {
-		return ENAMETOOLONG;
+		return -ENAMETOOLONG;
 	}
 
 	//if not only under root
 	if (strchr(filename, '/')){
-		return EPERM;
+		return -EPERM;
 	}
 
 	//make a new directory
@@ -255,7 +263,7 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	struct csc452_root_directory root;
 	// = (struct csc452_root_directory);
 	fseek(fp, 0, SEEK_SET);
-	fread(&root, sizeof(csc452_root_directory), 1, fp);  
+	fread(&root, sizeof(struct csc452_root_directory), 1, fp);  
 
 	if(root.nDirectories +1 > MAX_DIRS_IN_ROOT) {
 		return ENOSPC;
@@ -281,18 +289,23 @@ static int csc452_mkdir(const char *path, mode_t mode)
 			break;
 		}
 	}
-
+	
 	if(found == 0) {
-		return EDQUOT;
+		printf("returning error no room on disk");
+		return -EDQUOT;
 	}	
-
+	
 	fp = fopen (".disk", "ab+");
 	fseek(fp, 0, SEEK_SET);
-	fwrite(&root, sizeof(csc452_root_directory), 1, fp);
+	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp);
 
 	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
 	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
+	
 
+	fclose(fp);
+
+	printf("mkdir finished returned 0\n");
 	return 0;
 }
 
