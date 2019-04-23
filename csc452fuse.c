@@ -419,9 +419,98 @@ static int csc452_write(const char *path, const char *buf, size_t size,
  */
 static int csc452_rmdir(const char *path)
 {
-	  (void) path;
+	printf("calling rmdir\n");
+	//int i;
+	(void) path;
+	//(void) mode;
+	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+	strcpy(directory,"\0\0\0\0\0\0\0\0\0");
+	strcpy(filename,"\0\0\0\0\0\0\0\0\0");
+	strcpy(extension,"\0\0\0\0");
 
-	  return 0;
+	FILE * fp;
+	fp = fopen (".disk", "rb+");
+	if (! fp) {
+		printf("%s\n", "Could not open disk");
+		return -ENOSPC;
+	}
+	//save start position of file to return to later
+	unsigned long root_position;
+	fflush(fp);
+	root_position = ftell(fp);
+	
+	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+	if (directory_exists(directory, fp) == 0) {
+		printf("directory does not exists\n");
+		return -ENOENT;
+	}
+	if (strcmp(filename,"") != 0 && strcmp(extension,"") != 0) {
+		printf("path is not a directory\n");
+		return -ENOTDIR;
+	}
+
+
+
+	//read in root
+	fseek(fp, root_position, SEEK_SET);
+	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
+	fread(root, sizeof(struct csc452_root_directory), 1, fp);
+
+
+	fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
+	unsigned long bitmap_position;
+	fflush(fp);
+	bitmap_position = ftell(fp);
+	char bitmap[BLOCK_SIZE*20];
+
+
+	printf("root nDirectories = %d\n",root->nDirectories);
+	int i;
+	int found = 0;
+	//get the index of the directory to be removed
+	for(i = 0; i < root->nDirectories; i++) {
+		if(strcmp(root->directories[i].dname,directory) == 0) {
+			found = 1;
+			break;
+		}
+	}  
+
+	if(found == 0) {
+		//throw error
+		printf("could not find directory but it should exist\n");
+		return -ENOENT;
+	}
+	//delete values (set to null or zero)
+
+	bitmap[i] = (char) 0;
+	//initialize sets it to zero
+	struct csc452_directory newDirectory = {0};
+	
+	root->directories[i] = newDirectory;
+	root->nDirectories = root->nDirectories - 1;
+
+	printf("root nDirectories = %d\n",root->nDirectories);
+	
+
+	//write bitmap
+	fseek(fp, bitmap_position, SEEK_SET);
+	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
+
+
+	//write root back
+	fseek(fp, root_position, SEEK_SET);
+	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
+
+	//write new directory
+	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
+	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
+	
+	fclose(fp);
+
+
+
+	printf("rmdir finished returned 0\n");
+	return 0;
 }
 
 /*
