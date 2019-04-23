@@ -135,7 +135,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		
 		// read in root from disl
 		FILE * fp;
-	   	fp = fopen (".disk", "ab+");
+	   	fp = fopen (".disk", "rb");
 	   	struct csc452_root_directory root;
 		fseek(fp, 0, SEEK_SET);
 		fread(&root, sizeof(struct csc452_root_directory), 1, fp);   	
@@ -232,10 +232,10 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	strcpy(filename,"");
 	strcpy(extension,"");
 
-
-		
 	FILE * fp;
-	fp = fopen (".disk", "ab+");
+	FILE * fp2;
+	fp = fopen (".disk", "rb+");
+	fp2 = fp;
 	if (! fp) {
 		printf("%s\n", "Could not open disk");
 		return -ENOSPC;
@@ -262,7 +262,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	
 	struct csc452_root_directory root;
 	// = (struct csc452_root_directory);
-	fseek(fp, 0, SEEK_SET);
 	fread(&root, sizeof(struct csc452_root_directory), 1, fp);  
 
 	if(root.nDirectories +1 > MAX_DIRS_IN_ROOT) {
@@ -284,7 +283,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 			newDirectory.nStartBlock = i;
 			bitmap[i] = (char) 1;
 			root.directories[getFirstFreeDirectoryIndex(root)] = newDirectory;
-			fclose(fp);
 			found = 1;
 			break;
 		}
@@ -295,15 +293,12 @@ static int csc452_mkdir(const char *path, mode_t mode)
 		return -EDQUOT;
 	}	
 	
-	fp = fopen (".disk", "ab+");
-	fseek(fp, 0, SEEK_SET);
-	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp);
+	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp2);
 
-	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
-	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
+	fseek(fp2,i*BLOCK_SIZE, SEEK_SET);
+	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp2);
 	
-
-	fclose(fp);
+	fclose(fp2);
 
 	printf("mkdir finished returned 0\n");
 	return 0;
