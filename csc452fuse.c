@@ -242,24 +242,24 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	strcpy(extension,"");
 
 	FILE * fp;
-	FILE * fp2;
 	fp = fopen (".disk", "rb+");
-	fp2 = fp;
 	if (! fp) {
 		printf("%s\n", "Could not open disk");
 		return -ENOSPC;
 	}
+	//save start position of file to return to later
+	unsigned long root_position;
+	fflush(fp);
+	root_position = ftell(fp);
 	
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	if (directory_exists(directory, fp) == 1) {
 		printf("directory already exists\n");
 		return -EEXIST;
 	}
-	
 	if (strlen(directory) > 8) {
 		return -ENAMETOOLONG;
 	}
-
 	//if not only under root
 	if (strchr(filename, '/')){
 		return -EPERM;
@@ -287,6 +287,9 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	//10218 = 5*2^11 - 22 
 	//this is the block number the bit map starts on
 	fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
+	unsigned long bitmap_position;
+	fflush(fp);
+	bitmap_position = ftell(fp);
 	char bitmap[BLOCK_SIZE*20];
 
 	int found = 0;
@@ -295,7 +298,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
 			//theres space for a dir at i
-			
 			root.nDirectories++;
 			newDirectory.nStartBlock = i;
 			printf("directy name before setting = %s\n",newDirectory.dname);
@@ -308,13 +310,13 @@ static int csc452_mkdir(const char *path, mode_t mode)
 			break;
 		}
 	}
-	fclose(fp);
-	fp2 = fopen (".disk", "rb+");
 	if(found == 0) {
 		printf("returning error no room on disk");
 		return -EDQUOT;
 	}	
-
+	//write bitmap back
+	fseek(fp, bitmap_position, SEEK_SET);
+	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
 	if(root.nDirectories > 1000000 || root.nDirectories < 0) {
 				root.nDirectories = 1;
@@ -322,13 +324,15 @@ static int csc452_mkdir(const char *path, mode_t mode)
 
 	printf("nDirectories = %d\n",root.nDirectories);
 	printf("directories[0] = %s\n",root.directories[0].dname);
-	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp2);
+	//write root back
+	fseek(fp, root_position, SEEK_SET);
+	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp);
 
-	fseek(fp2,i*BLOCK_SIZE, SEEK_SET);
-	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp2);
+	//write new directory
+	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
+	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
 	
-	fclose(fp2);
-
+	fclose(fp);
 	printf("mkdir finished returned 0\n");
 	return 0;
 }
