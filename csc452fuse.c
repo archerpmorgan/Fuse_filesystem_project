@@ -208,6 +208,22 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	//satisfy the compiler
 	(void) offset;
 	(void) fi;
+	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+	strcpy(directory,"\0\0\0\0\0\0\0\0\0");
+	strcpy(filename,"\0\0\0\0\0\0\0\0\0");
+	strcpy(extension,"\0\0\0\0");
+	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+
+	// open disk
+	FILE * fp;
+	fp = fopen (".disk", "rb+");
+	if (! fp) {
+		printf("%s\n", "Could not open disk");
+		return -ENOSPC;
+	}
+	//read in root
+	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
+	fread(root, sizeof(struct csc452_root_directory), 1, fp);  
 
 	//A directory holds two entries, one that represents itself (.) 
 	//and one that represents the directory above us (..)
@@ -215,12 +231,14 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		filler(buf, ".", NULL,0);
 		filler(buf, "..", NULL, 0);
 	}
-	else {
-		// All we have _right now_ is root (/), so any other path must
-		// not exist. 
-		return -ENOENT;
+	else { // ls in the root directory (all we implement for sprint 1)
+		int i;
+		for (i = 0; i < MAX_DIRS_IN_ROOT; i++) {
+			if (strcmp(root->directories[i].dname, "") != 0){ // if we have a directory with a name
+				filler(buf, root->directories[i].dname, NULL, 0);
+			}
+		}
 	}
-
 	return 0;
 }
 
