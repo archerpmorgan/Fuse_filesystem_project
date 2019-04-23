@@ -134,19 +134,22 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 	} else  {
 		
 		// read in root from disl
-		FILE * fp;
-	   	fp = fopen (".disk", "rb");
+		FILE * fp1;
+	   	fp1 = fopen(".disk", "rb");
+	   
 	   	struct csc452_root_directory root;
-		fseek(fp, 0, SEEK_SET);
-		fread(&root, sizeof(struct csc452_root_directory), 1, fp);   	
-		
+	   	printf("get atter here 1\n");
+		fseek(fp1, 0, SEEK_SET);
+		printf("get atter here 1.5\n");
+		fread(&root, sizeof(struct csc452_root_directory), 1, fp1);   	
+		printf("get atter here 2\n");
 		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
 		strcpy(directory,"");
 		strcpy(filename,"");
 		strcpy(extension,"");
 
 		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-		
+		printf("get atter here 3\n");
 		// search filesystem for object specified by path
 		struct csc452_directory_entry dir;
 		int i,j;
@@ -157,19 +160,19 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
 					stbuf->st_nlink = 2;
-					fclose(fp);
+					fclose(fp1);
 					return res;
 				}
 				else {
-					fseek(fp, root.directories[i].nStartBlock, SEEK_SET);	
-					fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
+					fseek(fp1, root.directories[i].nStartBlock, SEEK_SET);	
+					fread(&dir, sizeof(struct csc452_directory_entry), 1, fp1); 
 					for (j = 0; j < dir.nFiles; j++) {
 						if (strcmp(dir.files[j].fname, filename) == 0) {
 							if (strcmp(dir.files[j].fext, extension) == 0) {
 								stbuf->st_mode = S_IFREG | 0666;
 								stbuf->st_nlink = 2;
 								stbuf->st_size = dir.files[j].fsize;
-								fclose(fp);
+								fclose(fp1);
 								return res;
 							}
 						}
@@ -177,7 +180,8 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 				}
 			}
 		}
-	  	fclose(fp);
+		printf("get atter here 4\n");
+	  	fclose(fp1);
 		//Else return that path doesn't exist
 		printf("%s", "get here, result is: ");
 		res = -ENOENT;
@@ -287,7 +291,7 @@ static int csc452_mkdir(const char *path, mode_t mode)
 			break;
 		}
 	}
-	
+	fclose(fp);
 	if(found == 0) {
 		printf("returning error no room on disk");
 		return -EDQUOT;
