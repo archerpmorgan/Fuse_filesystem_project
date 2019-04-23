@@ -85,11 +85,11 @@ typedef struct csc452_disk_block csc452_disk_block;
  * returns -1 on error (all directories in root are in use)
  *
 */
-int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
+int getFirstFreeDirectoryIndex(struct csc452_root_directory *root) {
 	printf("calling index func\n");
 	int i;
 	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
-		if(strlen(root.directories[i].dname) <= 0) { // intended function returns i if this directory is not taken
+		if(strlen(root->directories[i].dname) <= 0) { // intended function returns i if this directory is not taken
 			return i;
 		}
 	}
@@ -237,9 +237,9 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	(void) path;
 	(void) mode;
 	char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
-	strcpy(directory,"");
-	strcpy(filename,"");
-	strcpy(extension,"");
+	strcpy(directory,"\0\0\0\0\0\0\0\0\0");
+	strcpy(filename,"\0\0\0\0\0\0\0\0\0");
+	strcpy(extension,"\0\0\0\0");
 
 	FILE * fp;
 	fp = fopen (".disk", "rb+");
@@ -274,13 +274,12 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	}
 	strcpy(newDirectory.dname,directory);
 	
-	
-	struct csc452_root_directory root;
-	// = (struct csc452_root_directory);
-	fread(&root, sizeof(struct csc452_root_directory), 1, fp);  
-
-	if(root.nDirectories +1 > MAX_DIRS_IN_ROOT) {
-		printf("nDirectories = %d\n",root.nDirectories);
+	//read in root
+	fseek(fp, root_position, SEEK_SET);
+	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
+	fread(root, sizeof(struct csc452_root_directory), 1, fp);  
+	if(root->nDirectories +1 > MAX_DIRS_IN_ROOT) {
+		printf("nDirectories = %d\n",root->nDirectories);
 		return -ENOSPC;
 	}
 
@@ -298,13 +297,13 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
 			//theres space for a dir at i
-			root.nDirectories++;
+			root->nDirectories++;
 			newDirectory.nStartBlock = i;
 			printf("directy name before setting = %s\n",newDirectory.dname);
 			bitmap[i] = (char) 1;
 			int index = getFirstFreeDirectoryIndex(root);
 			printf("directory index = %d\n",index);
-			root.directories[index] = newDirectory;
+			root->directories[index] = newDirectory;
 			printf("directy name after setting root = %s\n",newDirectory.dname);
 			found = 1;
 			break;
@@ -318,15 +317,15 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fseek(fp, bitmap_position, SEEK_SET);
 	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
-	if(root.nDirectories > 1000000 || root.nDirectories < 0) {
-				root.nDirectories = 1;
+	if(root->nDirectories > 1000000 || root->nDirectories < 0) {
+				root->nDirectories = 1;
 			}
 
-	printf("nDirectories = %d\n",root.nDirectories);
-	printf("directories[0] = %s\n",root.directories[0].dname);
+	printf("nDirectories = %d\n",root->nDirectories);
+	printf("directories[0] = %s\n",root->directories[0].dname);
 	//write root back
 	fseek(fp, root_position, SEEK_SET);
-	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp);
+	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
 
 	//write new directory
 	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
