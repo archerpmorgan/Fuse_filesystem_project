@@ -138,24 +138,28 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 	   	fp1 = fopen(".disk", "rb");
 	   
 	   	struct csc452_root_directory root;
-	   	printf("get atter here 1\n");
+	   
 		fseek(fp1, 0, SEEK_SET);
-		printf("get atter here 1.5\n");
+		
 		fread(&root, sizeof(struct csc452_root_directory), 1, fp1);   	
-		printf("get atter here 2\n");
+		
 		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
 		strcpy(directory,"");
 		strcpy(filename,"");
 		strcpy(extension,"");
 
 		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-		printf("get atter here 3\n");
+		//printf("MAX_DIRS_IN_ROOT = %d\n", MAX_DIRS_IN_ROOT);
+		printf("nDirectories = %d\n", root.nDirectories);
+		
 		// search filesystem for object specified by path
 		struct csc452_directory_entry dir;
 		int i,j;
 		for (i = 0; i <root.nDirectories; i++){
-			if (strcmp(root.directories[i].dname, directory) == 0 ){
-				
+			//printf("get atter here 3.5\n");
+			//printf("got here - %d\n", i);
+			if (root.directories[i].dname != NULL && strcmp(root.directories[i].dname, directory) == 0 ){
+				printf("get atter here 4\n");
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
@@ -180,7 +184,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 				}
 			}
 		}
-		printf("get atter here 4\n");
+		printf("get atter here Z\n");
 	  	fclose(fp1);
 		//Else return that path doesn't exist
 		printf("%s", "get here, result is: ");
@@ -259,10 +263,16 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	if (strchr(filename, '/')){
 		return -EPERM;
 	}
-
+	
 	//make a new directory
 	struct csc452_directory newDirectory;
+	directory[strlen(directory)] = '\0';
+	printf("d = %s\n",directory);
+	for(int i = 0; i < strlen(directory + 1); i++){
+		newDirectory.dname[i] = directory[i];
+	}
 	strcpy(newDirectory.dname,directory);
+	
 	
 	struct csc452_root_directory root;
 	// = (struct csc452_root_directory);
@@ -283,20 +293,33 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
 			//theres space for a dir at i
+			
 			root.nDirectories++;
 			newDirectory.nStartBlock = i;
+			printf("directy name before setting = %s\n",newDirectory.dname);
 			bitmap[i] = (char) 1;
-			root.directories[getFirstFreeDirectoryIndex(root)] = newDirectory;
+			int index = getFirstFreeDirectoryIndex(root);
+			printf("directory index = %d\n",index);
+			root.directories[index] = newDirectory;
+			printf("directy name after setting root = %s\n",newDirectory.dname);
 			found = 1;
 			break;
 		}
 	}
 	fclose(fp);
+	fp2 = fopen (".disk", "rb+");
 	if(found == 0) {
 		printf("returning error no room on disk");
 		return -EDQUOT;
 	}	
-	
+
+
+	if(root.nDirectories > 1000000 || root.nDirectories < 0) {
+				root.nDirectories = 1;
+			}
+
+	printf("nDirectories = %d\n",root.nDirectories);
+	printf("directories[0] = %s\n",root.directories[0].dname);
 	fwrite(&root, sizeof(struct csc452_root_directory), 1, fp2);
 
 	fseek(fp2,i*BLOCK_SIZE, SEEK_SET);
