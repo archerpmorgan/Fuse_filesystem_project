@@ -86,9 +86,10 @@ typedef struct csc452_disk_block csc452_disk_block;
  *
 */
 int getFirstFreeDirectoryIndex(struct csc452_root_directory root) {
+	printf("calling index func\n");
 	int i;
 	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
-		if(strcmp(root.directories[i].dname, "")) { // intended function returns i if this directory is not taken
+		if(strlen(root.directories[i].dname) <= 0) { // intended function returns i if this directory is not taken
 			return i;
 		}
 	}
@@ -279,7 +280,8 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fread(&root, sizeof(struct csc452_root_directory), 1, fp);  
 
 	if(root.nDirectories +1 > MAX_DIRS_IN_ROOT) {
-		return ENOSPC;
+		printf("nDirectories = %d\n",root.nDirectories);
+		return -ENOSPC;
 	}
 
 	//10218 = 5*2^11 - 22 
