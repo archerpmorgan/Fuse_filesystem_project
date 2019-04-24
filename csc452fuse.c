@@ -441,7 +441,7 @@ static int csc452_rmdir(const char *path)
 	
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	if (directory_exists(directory, fp) == 0) {
-		printf("directory does not exists\n");
+		printf("directory does not exist\n");
 		return -ENOENT;
 	}
 	if (strcmp(filename,"") != 0 && strcmp(extension,"") != 0) {
@@ -449,26 +449,24 @@ static int csc452_rmdir(const char *path)
 		return -ENOTDIR;
 	}
 
-
-
 	//read in root
 	fseek(fp, root_position, SEEK_SET);
 	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
 	fread(root, sizeof(struct csc452_root_directory), 1, fp);
-
 
 	fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
 	unsigned long bitmap_position;
 	fflush(fp);
 	bitmap_position = ftell(fp);
 	char bitmap[BLOCK_SIZE*20];
+	fread(bitmap, sizeof(bitmap), 1, fp); 
 
 
 	printf("root nDirectories = %d\n",root->nDirectories);
 	int i;
 	int found = 0;
 	//get the index of the directory to be removed
-	for(i = 0; i < root->nDirectories; i++) {
+	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
 		if(strcmp(root->directories[i].dname,directory) == 0) {
 			found = 1;
 			break;
@@ -482,9 +480,15 @@ static int csc452_rmdir(const char *path)
 	}
 	//delete values (set to null or zero)
 
-	bitmap[i] = (char) 0;
+	//+ 1 for reasons only Archer knows
+	bitmap[i + 1] = (char) 0;
 	//initialize sets it to zero
 	struct csc452_directory newDirectory = {0};
+	struct csc452_directory_entry emptyEntry = {0};
+	
+	// clear out old directory block
+	fseek(fp, BLOCK_SIZE * (root->directories[i].nStartBlock), SEEK_SET);
+	fwrite(&emptyEntry, BLOCK_SIZE, 1, fp);
 	
 	root->directories[i] = newDirectory;
 	root->nDirectories = root->nDirectories - 1;
@@ -496,7 +500,6 @@ static int csc452_rmdir(const char *path)
 	fseek(fp, bitmap_position, SEEK_SET);
 	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
-
 	//write root back
 	fseek(fp, root_position, SEEK_SET);
 	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
@@ -506,8 +509,6 @@ static int csc452_rmdir(const char *path)
 	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
 	
 	fclose(fp);
-
-
 
 	printf("rmdir finished returned 0\n");
 	return 0;
