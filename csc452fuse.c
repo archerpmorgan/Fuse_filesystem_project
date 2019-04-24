@@ -86,7 +86,6 @@ typedef struct csc452_disk_block csc452_disk_block;
  *
 */
 int getFirstFreeDirectoryIndex(struct csc452_root_directory *root) {
-	printf("calling index func\n");
 	int i;
 	for(i = 0; i < MAX_DIRS_IN_ROOT; i++) {
 		if(strlen(root->directories[i].dname) <= 0) { // intended function returns i if this directory is not taken
@@ -108,7 +107,7 @@ int directory_exists(char* dirname, FILE* fp){
 	fseek(fp, 0, SEEK_SET);
 	fread(&root, sizeof(struct csc452_root_directory), 1, fp); 
 	int i;
-	for (i = 0; i <root.nDirectories; i++){
+	for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
 		if (strcmp(root.directories[i].dname, dirname) == 0 ){
 			return 1;
 		}
@@ -126,7 +125,6 @@ int directory_exists(char* dirname, FILE* fp){
  */
 static int csc452_getattr(const char *path, struct stat *stbuf)
 {
-	printf("calling getatt\n");
 	int res = 0;
 	
 	if (strcmp(path, "/") == 0) {
@@ -150,15 +148,11 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		strcpy(extension,"");
 
 		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-		//printf("MAX_DIRS_IN_ROOT = %d\n", MAX_DIRS_IN_ROOT);
-		printf("nDirectories = %d\n", root.nDirectories);
 		
 		// search filesystem for object specified by path
 		struct csc452_directory_entry dir;
 		int i,j;
-		for (i = 0; i <root.nDirectories; i++){
-			//printf("get atter here 3.5\n");
-			//printf("got here - %d\n", i);
+		for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
 			if (root.directories[i].dname != NULL && strcmp(root.directories[i].dname, directory) == 0 ){
 				printf("get atter here 4\n");
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
@@ -185,13 +179,10 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 				}
 			}
 		}
-		printf("get atter here Z\n");
 	  	fclose(fp1);
 		//Else return that path doesn't exist
-		printf("%s", "get here, result is: ");
 		res = -ENOENT;
 	}
-	printf("%d\n", res);
 	return res;
 }
 
@@ -249,8 +240,6 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 static int csc452_mkdir(const char *path, mode_t mode)
 {
 
-	printf("calling mkdir\n");
-
 	int i;
 	(void) path;
 	(void) mode;
@@ -286,7 +275,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	//make a new directory
 	struct csc452_directory newDirectory;
 	directory[strlen(directory)] = '\0';
-	printf("d = %s\n",directory);
 	for(int i = 0; i < strlen(directory + 1); i++){
 		newDirectory.dname[i] = directory[i];
 	}
@@ -317,30 +305,20 @@ static int csc452_mkdir(const char *path, mode_t mode)
 			//theres space for a dir at i
 			root->nDirectories++;
 			newDirectory.nStartBlock = i;
-			printf("directy name before setting = %s\n",newDirectory.dname);
 			bitmap[i] = (char) 1;
 			int index = getFirstFreeDirectoryIndex(root);
-			printf("directory index = %d\n",index);
 			root->directories[index] = newDirectory;
-			printf("directy name after setting root = %s\n",newDirectory.dname);
 			found = 1;
 			break;
 		}
 	}
 	if(found == 0) {
-		printf("returning error no room on disk");
 		return -EDQUOT;
 	}	
 	//write bitmap back
 	fseek(fp, bitmap_position, SEEK_SET);
 	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
-	if(root->nDirectories > 1000000 || root->nDirectories < 0) {
-				root->nDirectories = 1;
-			}
-
-	printf("nDirectories = %d\n",root->nDirectories);
-	printf("directories[0] = %s\n",root->directories[0].dname);
 	//write root back
 	fseek(fp, root_position, SEEK_SET);
 	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
@@ -350,7 +328,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
 	
 	fclose(fp);
-	printf("mkdir finished returned 0\n");
 	return 0;
 }
 
@@ -419,7 +396,6 @@ static int csc452_write(const char *path, const char *buf, size_t size,
  */
 static int csc452_rmdir(const char *path)
 {
-	printf("calling rmdir\n");
 	//int i;
 	(void) path;
 	//(void) mode;
@@ -462,7 +438,6 @@ static int csc452_rmdir(const char *path)
 	fread(bitmap, sizeof(bitmap), 1, fp); 
 
 
-	printf("root nDirectories = %d\n",root->nDirectories);
 	int i;
 	int found = 0;
 	//get the index of the directory to be removed
@@ -475,7 +450,6 @@ static int csc452_rmdir(const char *path)
 
 	if(found == 0) {
 		//throw error
-		printf("could not find directory but it should exist\n");
 		return -ENOENT;
 	}
 	//delete values (set to null or zero)
@@ -489,28 +463,21 @@ static int csc452_rmdir(const char *path)
 	// clear out old directory block
 	fseek(fp, BLOCK_SIZE * (root->directories[i].nStartBlock), SEEK_SET);
 	fwrite(&emptyEntry, BLOCK_SIZE, 1, fp);
-	
+
 	root->directories[i] = newDirectory;
 	root->nDirectories = root->nDirectories - 1;
-
-	printf("root nDirectories = %d\n",root->nDirectories);
 	
 
 	//write bitmap
 	fseek(fp, bitmap_position, SEEK_SET);
 	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
-	//write root back
+		//write root back
 	fseek(fp, root_position, SEEK_SET);
 	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
-
-	//write new directory
-	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
-	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
 	
 	fclose(fp);
 
-	printf("rmdir finished returned 0\n");
 	return 0;
 }
 
