@@ -136,7 +136,7 @@ int file_exists(char* fname, FILE* fp){
 			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
 				for (j = 0; j <MAX_FILES_IN_DIR; j++){
 					if (strcmp(dir.file[j].fname, fname) == 0 ){
-						return j;
+						return i;
 					}
 				}
 		}
@@ -603,13 +603,40 @@ static int csc452_unlink(const char *path)
 			return -ENOSPC;
 		}
 
-        if (file_exists(path, fp) == -1) {
+		int fex = file_exists(path, fp);
+
+        if (fex == -1) {
         	printf("file does not exist.\n");
         	close(fp);
         	return -ENOENT;
         }
 
+        int dirloc;
+		struct csc452_root_directory root;
+		struct csc452_directory_entry dir;
+		fseek(fp, 0, SEEK_SET);
+		fread(&root, sizeof(struct csc452_root_directory), 1, fp);
 
+
+
+		dirloc = root.directories[fex].nStartBlock;
+		fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
+		fread(&dir, sizeof(struct csc452_directory_entry), 1, fp);  
+
+		int i;
+		bool found = false;
+		for (i = 0; i <MAX_FILES_IN_DIR; i++) {
+			if (strcmp(dir.file[j].fname, fname) == 0 ){
+				found = true;
+				break;
+			}
+		}
+		if(found == false) {
+			printf("could not get to file\n");
+			close(fp);
+			return -ENOENT;
+		}
+		
 
 
         return 0;
