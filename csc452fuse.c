@@ -97,8 +97,7 @@ int getFirstFreeDirectoryIndex(struct csc452_root_directory *root) {
 
 
 /*
- * returns 1 if directory in root directory, 0 otherwise
- * returns -1 on error (all directories in root are in use)
+ * returns index into root if directory in root directory, -1 otherwise
  *
 */
 int directory_exists(char* dirname, FILE* fp){
@@ -109,7 +108,37 @@ int directory_exists(char* dirname, FILE* fp){
 	int i;
 	for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
 		if (strcmp(root.directories[i].dname, dirname) == 0 ){
-			return 1;
+			return i;
+		}
+	}
+	return -1;
+}
+
+/*
+ * returns 1 if file in some directory, 0 otherwise
+ *
+*/
+int file_exists(char* fname, FILE* fp){
+	int dirloc;
+	struct csc452_root_directory root;
+	struct csc452_directory_entry dir;
+	fseek(fp, 0, SEEK_SET);
+	fread(&root, sizeof(struct csc452_root_directory), 1, fp); 
+	int i;
+	int j;
+	for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
+		dirloc = root.directories[i].nStartBlock;
+		if (dirloc == 0 ){
+			continue;
+		}
+		else {
+			fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
+			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
+				for (j = 0; j <MAX_FILES_IN_DIR; j++){
+					if (strcmp(dir.file[i].fname, fname) == 0 ){
+						return 1;
+					}
+				}
 		}
 	}
 	return 0;
@@ -232,7 +261,6 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	}
 	return 0;
 }
-
 /*
  * Creates a directory. We can ignore mode since we're not dealing with
  * permissions, as long as getattr returns appropriate ones for us.
@@ -260,7 +288,8 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	root_position = ftell(fp);
 	
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-	if (directory_exists(directory, fp) == 1) {
+
+	if (directory_exists(directory, fp) >= 0) {
 		printf("directory already exists\n");
 		return -EEXIST;
 	}
@@ -298,7 +327,6 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	char bitmap[BLOCK_SIZE*20];
 
 	int found = 0;
-
 	fread(bitmap, sizeof(bitmap), 1, fp); 
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
@@ -341,9 +369,88 @@ static int csc452_mkdir(const char *path, mode_t mode)
  */
 static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 {
+	int i;
 	(void) path;
 	(void) mode;
     (void) dev;
+    char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+	strcpy(directory,"\0\0\0\0\0\0\0\0\0");
+	strcpy(filename,"\0\0\0\0\0\0\0\0\0");
+	strcpy(extension,"\0\0\0\0");
+
+	FILE * fp;
+	fp = fopen (".disk", "rb+");
+	if (! fp) {
+		printf("%s\n", "Could not open disk");
+		return -ENOSPC;
+	}
+	//save start position of file to return to later
+	unsigned long root_position;
+	fflush(fp);
+	root_position = ftell(fp);
+	
+	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+	printf("dirname is %s, filname is %s, ext is %s\n", directory, filename, extension);
+
+	if (file_exists(directory, fp) == 1) {
+		printf("file already exists\n");
+		return -EEXIST;
+	}
+	int dir_index = directory_exists(directory, fp);
+	if (dir_index < 0) {
+		return -ENOTDIR;
+	}
+	if (strlen(filename) < 1) {
+		return -EPERM;
+	}
+	if (strlen(directory) > 8) {
+		return -ENAMETOOLONG;
+	}
+	//if not only under root
+	if (strchr(filename, '/')){
+		return -EPERM;
+	}
+
+	//read in root
+	fseek(fp, root_position, SEEK_SET);
+	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
+	fread(root, sizeof(struct csc452_root_directory), 1, fp); 
+
+	// find block to store the file at
+	fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
+	unsigned long bitmap_position;
+	fflush(fp);
+	bitmap_position = ftell(fp);
+	char bitmap[BLOCK_SIZE*20];
+	int found = 0;
+	fread(bitmap, sizeof(bitmap), 1, fp); 
+	for(i = 1; i < 10218; i++) {
+		if(bitmap[i] == '\0') {
+			//theres space for a dir at i
+			root->nDirectories++;
+			newDirectory.nStartBlock = i;
+			bitmap[i] = (char) 1;
+			int index = getFirstFreeDirectoryIndex(root);
+			root->directories[index] = newDirectory;
+			found = 1;
+			break;
+		}
+	}
+	if(found == 0) {
+		return -EDQUOT;
+	}	
+
+	//read directory entry
+	struct csc452_directory_entry dir;
+	int dirloc = root->directories[dir_index].nStartBlock;
+	fseek(fp, BLOCK_SIZE*dirlock, SEEK_SET);
+	fread(&dir, sizeof(csc452_directory_entry), 1, fp);
+
+	// modify directory entry to contain new file pointer
+
+
+
+	fclose(fp);
 	
 	return 0;
 }
