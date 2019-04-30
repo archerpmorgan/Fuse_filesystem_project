@@ -95,6 +95,22 @@ int getFirstFreeDirectoryIndex(struct csc452_root_directory *root) {
 	return -1;
 }
 
+/*
+ * returns the first index of files in root that is free 
+ * returns -1 on error (all directories in root are in use)
+ *
+*/
+int getFirstFreeFileIndex(struct csc452_directory_entry *dir) {
+	int i;
+	for(i = 0; i < MAX_FILES_IN_DIR; i++) {
+		if(strlen(dir->files[i].fname) <= 0) { // intended function returns i if this directory is not taken
+			return i;
+		}
+	}
+	return -1;
+}
+
+
 
 /*
  * returns index into root if directory in root directory, -1 otherwise
@@ -135,7 +151,7 @@ int file_exists(char* fname, FILE* fp){
 			fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
 			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
 				for (j = 0; j <MAX_FILES_IN_DIR; j++){
-					if (strcmp(dir.file[i].fname, fname) == 0 ){
+					if (strcmp(dir.files[j].fname, fname) == 0 ){
 						return 1;
 					}
 				}
@@ -392,22 +408,27 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	printf("dirname is %s, filname is %s, ext is %s\n", directory, filename, extension);
 
-	if (file_exists(directory, fp) == 1) {
+	if (file_exists(directory, fp) > 0) {
 		printf("file already exists\n");
+		fclose(fp);
 		return -EEXIST;
 	}
 	int dir_index = directory_exists(directory, fp);
 	if (dir_index < 0) {
+		fclose(fp);
 		return -ENOTDIR;
 	}
 	if (strlen(filename) < 1) {
+		fclose(fp);
 		return -EPERM;
 	}
 	if (strlen(directory) > 8) {
+		fclose(fp);
 		return -ENAMETOOLONG;
 	}
 	//if not only under root
 	if (strchr(filename, '/')){
+		fclose(fp);
 		return -EPERM;
 	}
 
@@ -427,11 +448,7 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	for(i = 1; i < 10218; i++) {
 		if(bitmap[i] == '\0') {
 			//theres space for a dir at i
-			root->nDirectories++;
-			newDirectory.nStartBlock = i;
 			bitmap[i] = (char) 1;
-			int index = getFirstFreeDirectoryIndex(root);
-			root->directories[index] = newDirectory;
 			found = 1;
 			break;
 		}
@@ -441,14 +458,34 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	}	
 
 	//read directory entry
-	struct csc452_directory_entry dir;
+	struct csc452_directory_entry *dir = (struct csc452_directory_entry*) calloc(1, sizeof(struct csc452_directory_entry));
 	int dirloc = root->directories[dir_index].nStartBlock;
-	fseek(fp, BLOCK_SIZE*dirlock, SEEK_SET);
-	fread(&dir, sizeof(csc452_directory_entry), 1, fp);
+	fseek(fp, BLOCK_SIZE*dirloc, SEEK_SET);
+	fread(dir, sizeof(csc452_directory_entry), 1, fp);
+
+	//check if no space in dir
+	if (dir->nFiles > MAX_FILES_IN_DIR) {
+		fclose(fp);
+		return ENOSPC;
+	}
 
 	// modify directory entry to contain new file pointer
+	int index = getFirstFreeFileIndex(dir);
+	strcpy(dir->files[index].fname, filename);
+	strcpy(dir->files[index].fext, extension);
+	dir->files[index].nStartBlock = i;
 
+	//write bitmap back
+	fseek(fp, bitmap_position, SEEK_SET);
+	fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);
 
+	//write root back
+	fseek(fp, root_position, SEEK_SET);
+	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
+
+	//write updated directory
+	fseek(fp, BLOCK_SIZE*dirloc, SEEK_SET);
+	fwrite(&dir, sizeof(struct csc452_directory), 1, fp);
 
 	fclose(fp);
 	
