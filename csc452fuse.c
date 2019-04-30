@@ -135,13 +135,13 @@ int file_exists(char* fname, FILE* fp){
 			fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
 			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
 				for (j = 0; j <MAX_FILES_IN_DIR; j++){
-					if (strcmp(dir.file[i].fname, fname) == 0 ){
-						return 1;
+					if (strcmp(dir.file[j].fname, fname) == 0 ){
+						return j;
 					}
 				}
 		}
 	}
-	return 0;
+	return -1;
 
 }
 
@@ -595,6 +595,23 @@ static int csc452_rmdir(const char *path)
 static int csc452_unlink(const char *path)
 {
         (void) path;
+        FILE * fp;
+		fp = fopen (".disk", "rb+");
+		if (! fp) {
+			printf("%s\n", "Could not open disk");
+			close(fp);
+			return -ENOSPC;
+		}
+
+        if (file_exists(path, fp) == -1) {
+        	printf("file does not exist.\n");
+        	close(fp);
+        	return -ENOENT;
+        }
+
+
+
+
         return 0;
 }
 
