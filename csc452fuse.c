@@ -660,7 +660,7 @@ static int csc452_unlink(const char *path)
 		 int i;
 		 bool found = false;
 		 for (i = 0; i <MAX_FILES_IN_DIR; i++) {
-		 	if (strcmp(dir.file[i].fname, fname) == 0 ){
+		 	if (strcmp(dir.files[i].fname, fname) == 0 ){
 		 		found = true;
 		 		break;
 		 	}
@@ -672,6 +672,7 @@ static int csc452_unlink(const char *path)
 		 	return -ENOENT;
 		}
 		//int i is the index of the file we want to delete
+		struct csc452_file_directory file = dir.files[i];
 		
         return 0;
 }
