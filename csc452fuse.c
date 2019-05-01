@@ -258,13 +258,31 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	}
 	//read in root
 	struct csc452_root_directory *root = (struct csc452_root_directory*) calloc(1, sizeof(struct csc452_root_directory));
-	fread(root, sizeof(struct csc452_root_directory), 1, fp);  
+	fread(root, sizeof(struct csc452_root_directory), 1, fp);
+
+	//check existence, plus get index if exists
+	int dir_index = directory_exists(directory, fp);
+
+	// allocate dir
+	struct csc452_directory_entry *dir = (struct csc452_directory_entry*) calloc(1, sizeof(struct csc452_directory_entry));
+
 
 	//A directory holds two entries, one that represents itself (.) 
 	//and one that represents the directory above us (..)
 	if (strcmp(path, "/") != 0) {
 		filler(buf, ".", NULL,0);
 		filler(buf, "..", NULL, 0);
+
+		// acquire directory
+		fseek(fp, root->directories[dir_index].nStartBlock * BLOCK_SIZE, SEEK_SET);
+		fread(dir, sizeof(struct csc452_directory_entry), 1, fp);
+
+		//list all files
+		for (int i = 0; i < MAX_FILES_IN_DIR; i++){
+			if (strcmp(dir->files[i].fname, "") != 0){ // if we have a directory with a name
+				filler(buf, dir->files[i].fname, NULL, 0);
+			}
+		}
 	}
 	else { // ls in the root directory (all we implement for sprint 1)
 		int i;
