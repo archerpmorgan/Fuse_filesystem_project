@@ -134,7 +134,7 @@ int directory_exists(char* dirname, FILE* fp){
  * returns 1 if file in some directory, 0 otherwise
  *
 */
-int file_exists(char* fname, FILE* fp){
+int file_exists(char* dirname, char* fname, FILE* fp){
 	int dirloc;
 	struct csc452_root_directory root;
 	struct csc452_directory_entry dir;
@@ -147,7 +147,7 @@ int file_exists(char* fname, FILE* fp){
 		if (dirloc == 0 ){
 			continue;
 		}
-		else {
+		else if (strcmp(root.directories[i].dname, dirname) == 0 ) {
 			fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
 			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
 			for (j = 0; j <MAX_FILES_IN_DIR; j++){
@@ -425,7 +425,7 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
 	printf("dirname is %s, filname is %s, ext is %s\n", directory, filename, extension);
 
-	if (file_exists(directory, fp) > 0) {
+	if (file_exists(directory, filename, fp) > 0) {
 		printf("file already exists\n");
 		fclose(fp);
 		return -EEXIST;
@@ -648,6 +648,12 @@ static int csc452_rmdir(const char *path)
  */
 static int csc452_unlink(const char *path)
 {
+		int i;
+		char directory[MAX_FILENAME + 1], filename[MAX_FILENAME + 1], extension[MAX_EXTENSION + 1];
+		strcpy(directory,"\0\0\0\0\0\0\0\0\0");
+		strcpy(filename,"\0\0\0\0\0\0\0\0\0");
+		strcpy(extension,"\0\0\0\0");
+
 		//error check------------------------
         (void) path;
 		FILE * fp;
@@ -658,29 +664,27 @@ static int csc452_unlink(const char *path)
 		 	return -ENOSPC;
 		}
 
-		//save root position for later
-		unsigned long root_position;
-		fflush(fp);
-		root_position = ftell(fp);
-		//get index of directory
-		int fex = file_exists(path, fp);
-		
-
-        if (fex == -1) {
+		//get index of directory and file in the dir if it exists, return otherwise
+		int dex = directory_exists(directory, fp);
+		fseek(fp, 0, SEEK_SET);
+		int fex = file_exists(directory, filename, fp);
+		fseek(fp, 0, SEEK_SET);\
+        if (fex < 0 || dex < 0) {
         	printf("file does not exist.\n");
         	fclose(fp);
         	return -ENOENT;
          }
+
         //make root and directory-----------------------------
         int dirloc;
 		struct csc452_root_directory root;
 		struct csc452_directory_entry dir;
 		fseek(fp, 0, SEEK_SET);
 		fread(&root, sizeof(struct csc452_root_directory), 1, fp);
-		//blocklocation of directory
-		dirloc = root.directories[fex].nStartBlock;
+		dirloc = root.directories[dex].nStartBlock;
 		fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
-		fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
+		fread(&dir, sizeof(struct csc452_directory_entry), 1, fp);
+
 		//read in bitmap -----------------------------------------
 		fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
 		unsigned long bitmap_position;
@@ -688,48 +692,39 @@ static int csc452_unlink(const char *path)
 		bitmap_position = ftell(fp);
 		char bitmap[BLOCK_SIZE*20];
 		fread(bitmap, sizeof(bitmap), 1, fp);  
-		//index into correct directory and file----------------------
-		int i;
-		bool found = false;
-		for (i = 0; i <MAX_FILES_IN_DIR; i++) {
-		 	if (strcmp(dir.files[i].fname, fname) == 0 ){
-		 		found = true;
-		 		break;
-		 	}
-		}
-		//error check-----------------------------------------
-		if(found == false) {
-		 	printf("could not get to file\n");
-		 	fclose(fp);
-		 	return -ENOENT;
-		}
-		//int i is the index of the file we want to delete
-		struct csc452_file_directory file = dir.files[i];
+
+		// clear file struct in dir
+		struct csc452_file_directory file = dir.files[fex];
 		int fileSize = file.fsize;
 		int start = (int) file.nStartBlock;
-		//write bitmap
 		for(i = 0; i < fileSize; i++) {
 			bitmap[start + i + 1] = (char) 0;
 		}
+
 		//delete all blocks of the file
+		int file_start_loc = dir.files[fex].nStartBlock;
 		struct csc452_file_directory emptyFile = {0};
 		for(i = 0; i <fileSize; i++) {
-			fseek(fp, BLOCK_SIZE * (nStartBlock + i), SEEK_SET);
+			fseek(fp, BLOCK_SIZE * (file_start_loc + i), SEEK_SET);
 			fwrite(&emptyFile, BLOCK_SIZE, 1, fp);
 		}
+
 		//decrement number of files in dir
 		dir.nFiles--;
+
 		//write directory back
 		fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
 		fwrite(&dir, BLOCK_SIZE, 1, fp);
 
 		//write root back
-		root->directories[fex] = dir;
-		//write root back
-		fseek(fp, root_position, SEEK_SET);
-		fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
+		fseek(fp, 0, SEEK_SET);
+		fwrite(&root, sizeof(struct csc452_root_directory), 1, fp);
 
+		//write bitmap back
+		fseek(fp, bitmap_position, SEEK_SET);
+		fwrite(&bitmap, BLOCK_SIZE*20, 1, fp);		
 
+		fclose(fp);
         return 0;
 }
 
