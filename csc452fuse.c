@@ -648,47 +648,88 @@ static int csc452_rmdir(const char *path)
  */
 static int csc452_unlink(const char *path)
 {
+		//error check------------------------
         (void) path;
-  //       FILE * fp;
-		// fp = fopen (".disk", "rb+");
-		// if (! fp) {
-		// 	printf("%s\n", "Could not open disk");
-		// 	fclose(fp);
-		// 	return -ENOSPC;
-		// }
+		FILE * fp;
+		 fp = fopen (".disk", "rb+");
+		 if (! fp) {
+		 	printf("%s\n", "Could not open disk");
+		 	fclose(fp);
+		 	return -ENOSPC;
+		}
 
-		// int fex = file_exists(path, fp);
-
-  //       if (fex == -1) {
-  //       	printf("file does not exist.\n");
-  //       	fclose(fp);
-  //       	return -ENOENT;
-  //       }
-
-  //       int dirloc;
-		// struct csc452_root_directory root;
-		// struct csc452_directory_entry dir;
-		// fseek(fp, 0, SEEK_SET);
-		// fread(&root, sizeof(struct csc452_root_directory), 1, fp);
-
-		// dirloc = root.directories[fex].nStartBlock;
-		// fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
-		// fread(&dir, sizeof(struct csc452_directory_entry), 1, fp);  
-
-		// int i;
-		// bool found = false;
-		// for (i = 0; i <MAX_FILES_IN_DIR; i++) {
-		// 	if (strcmp(dir.file[j].fname, fname) == 0 ){
-		// 		found = true;
-		// 		break;
-		// 	}
-		// }
-		// if(found == false) {
-		// 	printf("could not get to file\n");
-		// 	fclose(fp);
-		// 	return -ENOENT;
-		// }
+		//save root position for later
+		unsigned long root_position;
+		fflush(fp);
+		root_position = ftell(fp);
+		//get index of directory
+		int fex = file_exists(path, fp);
 		
+
+        if (fex == -1) {
+        	printf("file does not exist.\n");
+        	fclose(fp);
+        	return -ENOENT;
+         }
+        //make root and directory-----------------------------
+        int dirloc;
+		struct csc452_root_directory root;
+		struct csc452_directory_entry dir;
+		fseek(fp, 0, SEEK_SET);
+		fread(&root, sizeof(struct csc452_root_directory), 1, fp);
+		//blocklocation of directory
+		dirloc = root.directories[fex].nStartBlock;
+		fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
+		fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
+		//read in bitmap -----------------------------------------
+		fseek(fp,10218*BLOCK_SIZE, SEEK_SET);
+		unsigned long bitmap_position;
+		fflush(fp);
+		bitmap_position = ftell(fp);
+		char bitmap[BLOCK_SIZE*20];
+		fread(bitmap, sizeof(bitmap), 1, fp);  
+		//index into correct directory and file----------------------
+		int i;
+		bool found = false;
+		for (i = 0; i <MAX_FILES_IN_DIR; i++) {
+		 	if (strcmp(dir.files[i].fname, fname) == 0 ){
+		 		found = true;
+		 		break;
+		 	}
+		}
+		//error check-----------------------------------------
+		if(found == false) {
+		 	printf("could not get to file\n");
+		 	fclose(fp);
+		 	return -ENOENT;
+		}
+		//int i is the index of the file we want to delete
+		struct csc452_file_directory file = dir.files[i];
+		int fileSize = file.fsize;
+		int start = (int) file.nStartBlock;
+		//write bitmap
+		for(i = 0; i < fileSize; i++) {
+			bitmap[start + i + 1] = (char) 0;
+		}
+		//delete all blocks of the file
+		struct csc452_file_directory emptyFile = {0};
+		for(i = 0; i <fileSize; i++) {
+			fseek(fp, BLOCK_SIZE * (nStartBlock + i), SEEK_SET);
+			fwrite(&emptyFile, BLOCK_SIZE, 1, fp);
+		}
+		//decrement number of files in dir
+		dir.nFiles--;
+		//write directory back
+		fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
+		fwrite(&dir, BLOCK_SIZE, 1, fp);
+
+		//write root back
+		root->directories[fex] = dir;
+		//write root back
+		fseek(fp, root_position, SEEK_SET);
+		fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
+
+
         return 0;
 }
 
