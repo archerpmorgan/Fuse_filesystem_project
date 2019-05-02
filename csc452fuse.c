@@ -238,6 +238,7 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 			 off_t offset, struct fuse_file_info *fi)
 {
 
+	printf("path is %s\n", path);
 	//Since we're building with -Wall (all warnings reported) we need
 	//to "use" every parameter, so let's just cast them to void to
 	//satisfy the compiler
@@ -254,6 +255,7 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	fp = fopen (".disk", "rb+");
 	if (! fp) {
 		printf("%s\n", "Could not open disk");
+		fclose(fp);
 		return -ENOSPC;
 	}
 	//read in root
@@ -273,7 +275,9 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		filler(buf, ".", NULL,0);
 		filler(buf, "..", NULL, 0);
 
+		printf("get here\n");
 		// acquire directory
+		printf("Seeking to block%d\n", root->directories[dir_index].nStartBlock * BLOCK_SIZE);
 		fseek(fp, root->directories[dir_index].nStartBlock * BLOCK_SIZE, SEEK_SET);
 		fread(dir, sizeof(struct csc452_directory_entry), 1, fp);
 
@@ -285,13 +289,16 @@ static int csc452_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 		}
 	}
 	else { // ls in the root directory (all we implement for sprint 1)
+		printf("get here for root\n");
 		int i;
 		for (i = 0; i < MAX_DIRS_IN_ROOT; i++) {
+			printf("get here for root\n");
 			if (strcmp(root->directories[i].dname, "") != 0){ // if we have a directory with a name
 				filler(buf, root->directories[i].dname, NULL, 0);
 			}
 		}
 	}
+	fclose(fp);
 	return 0;
 }
 /*
@@ -335,11 +342,7 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	}
 	
 	//make a new directory
-	struct csc452_directory newDirectory;
-	directory[strlen(directory)] = '\0';
-	for(int i = 0; i < strlen(directory + 1); i++){
-		newDirectory.dname[i] = directory[i];
-	}
+	struct csc452_directory newDirectory = {0};
 	strcpy(newDirectory.dname,directory);
 	
 	//read in root
