@@ -192,13 +192,14 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		strcpy(extension,"");
 
 		sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
+		printf("filename is %s - %s\n", filename, extension);
 		
 		// search filesystem for object specified by path
 		struct csc452_directory_entry dir;
 		int i,j;
 		for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
 			if (root.directories[i].dname != NULL && strcmp(root.directories[i].dname, directory) == 0 ){
-				printf("get atter here 4\n");
+				printf("get atter here 5\n");
 				if (strcmp(filename, "") == 0 && strcmp(extension, "") == 0) {
 					//its a directory
 					stbuf->st_mode = S_IFDIR | 0755;
@@ -208,9 +209,14 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 				}
 				else {
 					fseek(fp1, root.directories[i].nStartBlock, SEEK_SET);	
-					fread(&dir, sizeof(struct csc452_directory_entry), 1, fp1); 
+					fread(&dir, sizeof(struct csc452_directory_entry), 1, fp1);
+					printf("searching through dir %d files\n", dir.nFiles); 
+					//BUG HERE------------------------
+					//dir.nFiles is a huge number, should'nt be
+					
 					for (j = 0; j < dir.nFiles; j++) {
 						if (strcmp(dir.files[j].fname, filename) == 0) {
+							printf("got into file %s\n", filename);
 							if (strcmp(dir.files[j].fext, extension) == 0) {
 								stbuf->st_mode = S_IFREG | 0666;
 								stbuf->st_nlink = 2;
@@ -227,6 +233,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		//Else return that path doesn't exist
 		res = -ENOENT;
 	}
+	printf("getattr returned\n");
 	return res;
 }
 
