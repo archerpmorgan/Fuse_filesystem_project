@@ -135,26 +135,21 @@ int directory_exists(char* dirname, FILE* fp){
  *
 */
 int file_exists(char* dirname, char* fname, FILE* fp){
-	int dirloc;
-	struct csc452_root_directory root;
-	struct csc452_directory_entry dir;
+	int dirloc = directory_exists(dirname, fp);
+	if (dirloc < 0) {
+		return -1;
+	}
+	struct csc452_root_directory root = {0};
+	struct csc452_directory_entry dir = {0};
 	fseek(fp, 0, SEEK_SET);
-	fread(&root, sizeof(struct csc452_root_directory), 1, fp); 
-	int i;
+	fread(&root, sizeof(struct csc452_root_directory), 1, fp);
+	fseek(fp, root.directories[dirloc].nStartBlock * BLOCK_SIZE, SEEK_SET);
+	fread(&dir, sizeof(struct csc452_directory_entry), 1, fp);
 	int j;
-	for (i = 0; i <MAX_DIRS_IN_ROOT; i++){
-		dirloc = root.directories[i].nStartBlock;
-		if (dirloc == 0 ){
-			continue;
-		}
-		else if (strcmp(root.directories[i].dname, dirname) == 0 ) {
-			fseek(fp, BLOCK_SIZE * dirloc, SEEK_SET);
-			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp); 
-			for (j = 0; j <MAX_FILES_IN_DIR; j++){
-				if (strcmp(dir.files[j].fname, fname) == 0 ){
-					return i;
-				}
-			}
+	for (j = 0; j <MAX_FILES_IN_DIR; j++){
+		printf("doing this%s", dir.files[j].fname);
+		if (strcmp(dir.files[j].fname, fname) == 0 ){
+			return j;
 		}
 	}
 	return -1;
@@ -202,14 +197,18 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 		fseek(fp, 0, SEEK_SET);
 		fclose(fp);
 
+		printf("dex and fex are %d and %d\n", dex, fex);
+
 		if (dex < 0 ) { // directory does not exist
 			res = -ENOENT;
+			printf("%s\n", "bad directroy");
 		}
 		else if (dex >=0 && (strcmp(filename, "") == 0)) { //directory 
 			stbuf->st_mode = S_IFDIR | 0755;
 			stbuf->st_nlink = 2;
 		}
-		else if (dex > 0 && fex > 0) { // existing file
+		else if (dex >= 0 && fex >= 0) { // existing file
+			printf("%s\n", "file exists in directory");
 			fseek(fp, root.directories[dex].nStartBlock, SEEK_SET);	
 			fread(&dir, sizeof(struct csc452_directory_entry), 1, fp);
 			stbuf->st_mode = S_IFREG | 0666;
@@ -217,6 +216,7 @@ static int csc452_getattr(const char *path, struct stat *stbuf)
 			stbuf->st_size = dir.files[fex].fsize;
 		}
 		else { // file does not exist
+			printf("%s\n", "couldn't find file");
 			res = - ENOENT;
 		}
 	}
@@ -378,8 +378,9 @@ static int csc452_mkdir(const char *path, mode_t mode)
 	fwrite(root, sizeof(struct csc452_root_directory), 1, fp);
 
 	//write new directory
+	struct csc452_directory_entry emptydir = {0}; 
 	fseek(fp,i*BLOCK_SIZE, SEEK_SET);
-	fwrite(&newDirectory, sizeof(struct csc452_directory), 1, fp);
+	fwrite(&emptydir, sizeof(struct csc452_directory), 1, fp);
 	
 	fclose(fp);
 	return 0;
@@ -421,29 +422,29 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	if (file_exists(directory, filename, fp) > 0) {
 		printf("file already exists\n");
 		fclose(fp);
-		printf("err5\n", );
+		printf("err5\n");
 		return -EEXIST;
 	}
 	int dir_index = directory_exists(directory, fp);
 	if (dir_index < 0) {
-		printf("err1\n", );
+		printf("err1\n");
 		fclose(fp);
 		return -ENOTDIR;
 	}
 	if (strlen(filename) < 1) {
 		fclose(fp);
-		printf("err2\n", );
+		printf("err2\n");
 		return -EPERM;
 	}
 	if (strlen(directory) > 8) {
 		fclose(fp);
-		printf("err3\n", );
+		printf("err3\n");
 		return -ENAMETOOLONG;
 	}
 	//if not only under root
 	if (strchr(filename, '/')){
 		fclose(fp);
-		printf("err4\n", );
+		printf("err4\n");
 		return -EPERM;
 	}
 
@@ -469,19 +470,21 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 		}
 	}
 	if(found == 0) {
+		printf("err100\n");
 		return -EDQUOT;
 	}	
 
 	//read directory entry
 	struct csc452_directory_entry *dir = (struct csc452_directory_entry*) calloc(1, sizeof(struct csc452_directory_entry));
 	int dirloc = root->directories[dir_index].nStartBlock;
+
 	fseek(fp, BLOCK_SIZE*dirloc, SEEK_SET);
 	fread(dir, sizeof(csc452_directory_entry), 1, fp);
-
-	//check if no space in dir
+	printf("dirloc is %d, nFiles is %d, Max is %d", dirloc, dir->nFiles, MAX_FILES_IN_DIR);
+	//check if no space in d
 	if (dir->nFiles > MAX_FILES_IN_DIR) {
 		fclose(fp);
-		printf("err7\n", );
+		printf("err7\n");
 		return ENOSPC;
 	}
 
@@ -490,6 +493,7 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 	strcpy(dir->files[index].fname, filename);
 	strcpy(dir->files[index].fext, extension);
 	dir->files[index].nStartBlock = i;
+	dir->nFiles += 1;
 
 	//write bitmap back
 	fseek(fp, bitmap_position, SEEK_SET);
@@ -501,7 +505,7 @@ static int csc452_mknod(const char *path, mode_t mode, dev_t dev)
 
 	//write updated directory
 	fseek(fp, BLOCK_SIZE*dirloc, SEEK_SET);
-	fwrite(&dir, sizeof(struct csc452_directory), 1, fp);
+	fwrite(dir, sizeof(struct csc452_directory), 1, fp);
 
 	fclose(fp);
 	
@@ -576,7 +580,7 @@ static int csc452_rmdir(const char *path)
 	root_position = ftell(fp);
 	
 	sscanf(path, "/%[^/]/%[^.].%s", directory, filename, extension);
-	if (directory_exists(directory, fp) == 0) {
+	if (directory_exists(directory, fp) < 0) {
 		printf("directory does not exist\n");
 		return -ENOENT;
 	}
